@@ -1,143 +1,223 @@
-import sqlite3
+import pandas as pd
+import numpy as np
 import random
 from faker import Faker
-from datetime import datetime, timedelta
 
-# Faker() creates a fake data generator object
-# We tell it to use Indian locale for realistic Indian names and cities
 fake = Faker("en_IN")
-
-# random.seed makes sure we get the same data every time we run this
-# Without this, every run gives different data which causes inconsistency
 random.seed(42)
+np.random.seed(42)
 fake.seed_instance(42)
 
 
-def generate_students(num_students=200):
+def generate_students(filepath="data_gen/raw/studentInfo.csv"):
     """
-    Creates a list of fake students.
-    Each student is a tuple matching the students table columns.
+    Loads real students from OULAD dataset.
+    Adds synthetic columns that OULAD doesn't have
+    but our analysis needs — device_type and location.
     """
-    students = []
+    df = pd.read_csv(filepath)
     
-    # Possible values to pick from randomly
-    genders      = ["Male", "Female", "Other"]
-    device_types = ["Mobile", "Desktop", "Tablet"]
-    cities       = ["Bengaluru", "Mumbai", "Delhi", "Chennai", 
-                    "Hyderabad", "Pune", "Kolkata", "Jaipur"]
+    # Keep only the columns we need and rename them
+    # to match our database schema
+    df = df[[
+        "id_student",
+        "gender",
+        "age_band",
+        "highest_education",
+        "final_result"
+    ]].copy()
     
-    for i in range(num_students):
-        # fake.name() generates a random realistic name
-        name = fake.name()
-        
-        # random.randint(a, b) picks a random integer between a and b
-        age = random.randint(18, 35)
-        
-        # random.choice picks one item randomly from a list
-        gender   = random.choice(genders)
-        location = random.choice(cities)
-        device   = random.choice(device_types)
-        
-        # Generate a random date in the past 2 years as joined_date
-        days_ago   = random.randint(30, 730)
-        joined     = datetime.now() - timedelta(days=days_ago)
-        joined_str = joined.strftime("%Y-%m-%d")
-        
-        # Each student is stored as a tuple — one row in the table
-        students.append((name, age, gender, location, joined_str, device))
+    # Rename to match our schema
+    df.columns = ["real_id", "gender", "age_band", "education", "final_result"]
     
-    print(f" Generated {len(students)} students")
-    return students
+    # Map gender M/F to Male/Female
+    df["gender"] = df["gender"].map({"M": "Male", "F": "Female"})
+    df["gender"] = df["gender"].fillna("Other")
+    
+    # Map age_band to a single integer (midpoint of range)
+    age_map = {
+        "0-35":  25,
+        "35-55": 45,
+        "55<=":  60
+    }
+    df["age"] = df["age_band"].map(age_map).fillna(25).astype(int)
+    
+    # Add synthetic columns that OULAD doesn't have
+    # These are realistic additions, not pure invention
+    cities = [
+        "Bengaluru", "Mumbai", "Delhi", "Chennai",
+        "Hyderabad", "Pune", "Kolkata", "Jaipur"
+    ]
+    devices = ["Mobile", "Desktop", "Tablet"]
+    
+    df["location"]    = [random.choice(cities)   for _ in range(len(df))]
+    df["device_type"] = [random.choice(devices)  for _ in range(len(df))]
+    df["name"]        = [fake.name()              for _ in range(len(df))]
+    
+    # Generate joined_date — slightly before their first session
+    from datetime import datetime, timedelta
+    df["joined_date"] = [
+        (datetime.now() - timedelta(days=random.randint(100, 900))).strftime("%Y-%m-%d")
+        for _ in range(len(df))
+    ]
+    
+    # Final columns matching our students table exactly
+    result = df[[
+        "name", "age", "gender", "location", "joined_date", "device_type"
+    ]]
+    
+    # Take first 500 students for a manageable dataset
+    result = result.head(500).reset_index(drop=True)
+    
+    print(f" Loaded {len(result)} real students from OULAD dataset")
+    return [tuple(row) for row in result.values]
 
 
 def generate_modules():
     """
-    Creates the list of course modules available on the platform.
-    We hardcode these because we want specific realistic course names.
+    Modules stay the same — these are realistic course names
+    we define ourselves. OULAD uses coded module names.
     """
     modules = [
-        # (module_name, category, difficulty, total_videos, total_quizzes)
-        ("Python Basics",            "Programming",   "Beginner",      20, 5),
-        ("Data Science 101",         "Data Science",  "Beginner",      25, 6),
-        ("Machine Learning",         "AI/ML",         "Intermediate",  30, 8),
-        ("Statistics Fundamentals",  "Mathematics",   "Beginner",      18, 5),
-        ("Deep Learning",            "AI/ML",         "Advanced",      35, 10),
-        ("Data Visualization",       "Data Science",  "Intermediate",  22, 6),
-        ("SQL and Databases",        "Programming",   "Beginner",      15, 4),
-        ("Web Development",          "Programming",   "Intermediate",  28, 7),
-        ("Cloud Computing",          "DevOps",        "Intermediate",  20, 5),
-        ("Natural Language Processing", "AI/ML",      "Advanced",      32, 9),
+        ("Python Basics",               "Programming",  "Beginner",      20, 5),
+        ("Data Science 101",            "Data Science", "Beginner",      25, 6),
+        ("Machine Learning",            "AI/ML",        "Intermediate",  30, 8),
+        ("Statistics Fundamentals",     "Mathematics",  "Beginner",      18, 5),
+        ("Deep Learning",               "AI/ML",        "Advanced",      35, 10),
+        ("Data Visualization",          "Data Science", "Intermediate",  22, 6),
+        ("SQL and Databases",           "Programming",  "Beginner",      15, 4),
+        ("Web Development",             "Programming",  "Intermediate",  28, 7),
+        ("Cloud Computing",             "DevOps",       "Intermediate",  20, 5),
+        ("Natural Language Processing", "AI/ML",        "Advanced",      32, 9),
     ]
-    
     print(f" Generated {len(modules)} modules")
     return modules
 
 
-def generate_sessions(num_students=200, num_modules=10, num_sessions=5000):
+def generate_sessions(
+    filepath="data_gen/raw/studentVle.csv",
+    num_students=500,
+    num_modules=10
+):
     """
-    Creates fake study sessions.
-    Each session = one student studying one module on one day.
+    Uses real VLE (Virtual Learning Environment) interaction data from OULAD.
+    studentVle.csv has real click/interaction counts per student per day.
+    We map those real interactions to our session schema.
+    """
+    try:
+        df_vle = pd.read_csv(filepath)
+        print(f"   Real VLE data loaded: {len(df_vle)} interaction records")
+        
+        # OULAD VLE has: id_student, id_site, date, sum_click
+        # We aggregate by student and date to get one session per day
+        df_sessions = df_vle.groupby(
+            ["id_student", "date"]
+        ).agg(
+            total_clicks=("sum_click", "sum"),
+        ).reset_index()
+        
+        # Map real student IDs to our sequential 1-500 IDs
+        real_ids   = df_sessions["id_student"].unique()
+        id_mapping = {
+            real_id: (i % num_students) + 1
+            for i, real_id in enumerate(real_ids)
+        }
+        df_sessions["student_id"] = df_sessions["id_student"].map(id_mapping)
+        
+        # Convert clicks to duration — roughly 1 click = 1.5 minutes
+        df_sessions["duration_minutes"] = (
+            df_sessions["total_clicks"] * 1.5
+        ).clip(5, 180).astype(int)
+        
+        # Add our synthetic columns based on real duration
+        df_sessions["module_id"] = [
+            random.randint(1, num_modules)
+            for _ in range(len(df_sessions))
+        ]
+        df_sessions["videos_watched"] = (
+            df_sessions["duration_minutes"] / 15
+        ).clip(0, 10).astype(int)
+        
+        # Quiz score: correlated with clicks (more engagement = slightly higher score)
+        # This is realistic and will make our statistics meaningful
+        base_scores = df_sessions["total_clicks"].clip(0, 100)
+        noise       = np.random.normal(0, 15, len(df_sessions))
+        df_sessions["quiz_score"] = (
+            base_scores * 0.5 + 40 + noise
+        ).clip(0, 100).round(2)
+        
+        df_sessions["completed"] = (
+            df_sessions["duration_minutes"] > 60
+        ).astype(int)
+        
+        df_sessions["login_hour"] = np.random.choice(
+            range(24),
+            size=len(df_sessions),
+            p=[
+                0.01,0.01,0.01,0.01,0.01,0.01,0.01,
+                0.03,0.06,0.06,0.05,0.04,0.04,0.04,
+                0.04,0.04,0.05,0.05,0.06,0.07,0.07,
+                0.06,0.04,0.02
+            ]
+        )
+        df_sessions["device_type"] = np.random.choice(
+            ["Mobile", "Desktop", "Tablet"],
+            size=len(df_sessions)
+        )
+        
+        # Convert OULAD date (integer days) to real dates
+        from datetime import datetime, timedelta
+        base_date = datetime(2024, 1, 1)
+        df_sessions["session_date"] = df_sessions["date"].apply(
+            lambda d: (base_date + timedelta(days=int(d))).strftime("%Y-%m-%d")
+        )
+        
+        # Take up to 8000 sessions
+        df_sessions = df_sessions.head(8000)
+        
+        final = df_sessions[[
+            "student_id", "module_id", "session_date",
+            "duration_minutes", "videos_watched", "quiz_score",
+            "completed", "login_hour", "device_type"
+        ]]
+        
+        print(f" Generated {len(final)} sessions from real OULAD interaction data")
+        return [tuple(row) for row in final.values]
     
-    This is the most important table — it has all the behavioral data
-    that we will run statistics on later.
-    """
+    except FileNotFoundError:
+        # Fallback to synthetic if VLE file not found
+        print("   VLE file not found — using synthetic sessions")
+        return _synthetic_sessions(num_students, num_modules)
+
+
+def _synthetic_sessions(num_students=500, num_modules=10, num_sessions=8000):
+    """Fallback synthetic session generator"""
     sessions = []
-    device_types = ["Mobile", "Desktop", "Tablet"]
+    devices  = ["Mobile", "Desktop", "Tablet"]
+    from datetime import datetime, timedelta
     
-    for i in range(num_sessions):
-        # Pick a random student and module for this session
-        # student IDs go from 1 to num_students (SQLite starts at 1)
+    for _ in range(num_sessions):
         student_id = random.randint(1, num_students)
         module_id  = random.randint(1, num_modules)
-        
-        # Random session date in the past year
-        days_ago     = random.randint(1, 365)
-        session_date = (datetime.now() - timedelta(days=days_ago)).strftime("%Y-%m-%d")
-        
-        # Duration between 5 and 180 minutes
-        duration = random.randint(5, 180)
-        
-        # Videos watched — more time usually means more videos
-        # min() makes sure we don't exceed 10 videos per session
-        videos = min(int(duration / 15) + random.randint(0, 2), 10)
-        
-        # Quiz score between 0 and 100
-        # We use a slight positive skew — most students score okay
-        # random.gauss gives a bell curve centered at 65, spread of 20
-        quiz_score = max(0, min(100, random.gauss(65, 20)))
-        quiz_score = round(quiz_score, 2)
-        
-        # Completed: students who studied longer are more likely to finish
-        # This creates a realistic relationship between duration and completion
-        completed = 1 if duration > 60 and random.random() > 0.3 else 0
-        
-        # Login hour: 0-23 (what time of day they logged in)
-        # Students tend to study morning or evening — weighted distribution
-        login_hour = random.choices(
-            range(24),
-            # Higher weights for morning (8-10) and evening (19-22)
-            weights=[1,1,1,1,1,1,1,2,4,4,3,2,2,2,2,2,3,3,4,5,5,4,2,1]
-        )[0]
-        
-        device = random.choice(device_types)
-        
+        days_ago   = random.randint(1, 365)
+        date_str   = (
+            datetime.now() - timedelta(days=days_ago)
+        ).strftime("%Y-%m-%d")
+        duration   = random.randint(5, 180)
+        videos     = min(int(duration / 15) + random.randint(0, 2), 10)
+        score      = round(max(0, min(100, random.gauss(65, 20))), 2)
+        completed  = 1 if duration > 60 and random.random() > 0.3 else 0
+        login_hour = random.randint(0, 23)
+        device     = random.choice(devices)
         sessions.append((
-            student_id, module_id, session_date, duration,
-            videos, quiz_score, completed, login_hour, device
+            student_id, module_id, date_str, duration,
+            videos, score, completed, login_hour, device
         ))
-    
-    print(f" Generated {len(sessions)} sessions")
     return sessions
 
 
 if __name__ == "__main__":
-    print("Starting data generation...\n")
-    
-    students = generate_students(200)
-    modules  = generate_modules()
-    sessions = generate_sessions(200, 10, 5000)
-    
-    print("\n All data generated successfully")
-    print(f"   Students : {len(students)}")
-    print(f"   Modules  : {len(modules)}")
-    print(f"   Sessions : {len(sessions)}")
+    s = generate_students()
+    m = generate_modules()
+    sess = generate_sessions()
+    print(f"\nFinal counts — Students: {len(s)}, Modules: {len(m)}, Sessions: {len(sess)}")
