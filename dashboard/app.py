@@ -1,406 +1,355 @@
 import streamlit as st
-import sqlite3
 import pandas as pd
 import numpy as np
 import plotly.express as px
-import plotly.graph_objects as go
 from scipy import stats
 import statsmodels.api as sm
-import sys, os
-sys.path.append(".")
-from processing.features import load_and_engineer
+from sklearn.preprocessing import MinMaxScaler
 import warnings
 warnings.filterwarnings("ignore")
 
-# ── Page config ─────────────────────────────────────────────
 st.set_page_config(
     page_title="EduPulse Dashboard",
     page_icon="📊",
-    layout="wide",
-    initial_sidebar_state="expanded"
+    layout="wide"
 )
 
-# ── Custom CSS ───────────────────────────────────────────────
 st.markdown("""
 <style>
-    .main-title {
-        font-size: 2.2rem;
-        font-weight: 700;
-        color: #1D9E75;
-        margin-bottom: 0;
-    }
-    .sub-title {
-        font-size: 1rem;
-        color: #666;
-        margin-bottom: 2rem;
-    }
-    .metric-card {
-        background: #f8f9fa;
-        border-radius: 10px;
-        padding: 1rem;
-        border-left: 4px solid #1D9E75;
-    }
-    .section-header {
-        font-size: 1.3rem;
-        font-weight: 600;
-        color: #1D9E75;
-        border-bottom: 2px solid #E1F5EE;
-        padding-bottom: 0.5rem;
-        margin: 1.5rem 0 1rem 0;
-    }
+.main-title { font-size:2.2rem; font-weight:700; color:#1D9E75; }
+.sub-title  { font-size:1rem; color:#666; margin-bottom:1.5rem; }
+.sec-header { font-size:1.2rem; font-weight:600; color:#1D9E75;
+              border-bottom:2px solid #E1F5EE; padding-bottom:4px;
+              margin:1.2rem 0 0.8rem 0; }
 </style>
 """, unsafe_allow_html=True)
 
 
-# ── Load data (cached so it doesn't reload on every interaction) ──
 @st.cache_data
 def load_data():
-    conn     = sqlite3.connect("database/eduPulse.db")
-    students = pd.read_sql("SELECT * FROM students", conn)
-    sessions = pd.read_sql("SELECT * FROM sessions", conn)
-    modules  = pd.read_sql("SELECT * FROM modules",  conn)
-    conn.close()
-    df, _, _ = load_and_engineer()
+    import random
+    from faker import Faker
+    from datetime import datetime, timedelta
+    from sklearn.preprocessing import MinMaxScaler
+
+    fake = Faker("en_IN")
+    random.seed(42)
+    np.random.seed(42)
+
+    # Load real OULAD student data
+    df_raw = pd.read_csv("data_gen/raw/studentInfo.csv")
+    df_raw = df_raw[["id_student","gender","age_band"]].head(500).copy()
+    df_raw["gender"] = df_raw["gender"].map({"M":"Male","F":"Female"}).fillna("Other")
+    age_map = {"0-35":25,"35-55":45,"55<=":60}
+    df_raw["age"] = df_raw["age_band"].map(age_map).fillna(25).astype(int)
+
+    cities  = ["Bengaluru","Mumbai","Delhi","Chennai","Hyderabad","Pune","Kolkata","Jaipur"]
+    devices = ["Mobile","Desktop","Tablet"]
+    df_raw["location"]    = [random.choice(cities)  for _ in range(len(df_raw))]
+    df_raw["device_type"] = [random.choice(devices) for _ in range(len(df_raw))]
+    df_raw["name"]        = [fake.name()             for _ in range(len(df_raw))]
+    df_raw["student_id"]  = range(1, len(df_raw)+1)
+
+    students = df_raw[["student_id","name","age","gender","location","device_type"]]
+
+    modules = pd.DataFrame({
+        "module_id"  : range(1,11),
+        "module_name": ["Python Basics","Data Science 101","Machine Learning",
+                        "Statistics Fundamentals","Deep Learning",
+                        "Data Visualization","SQL and Databases",
+                        "Web Development","Cloud Computing",
+                        "Natural Language Processing"],
+        "category"   : ["Programming","Data Science","AI/ML","Mathematics","AI/ML",
+                        "Data Science","Programming","Programming","DevOps","AI/ML"],
+        "difficulty" : ["Beginner","Beginner","Intermediate","Beginner","Advanced",
+                        "Intermediate","Beginner","Intermediate","Intermediate","Advanced"]
+    })
+
+    # Synthetic sessions
+    n = 8000
+    sid      = np.random.randint(1, 501,  size=n)
+    mid      = np.random.randint(1, 11,   size=n)
+    dur      = np.random.randint(5, 181,  size=n)
+    vids     = np.clip((dur/15).astype(int) + np.random.randint(0,3,n), 0, 10)
+    scores   = np.clip(dur*0.3 + 20 + np.random.normal(0,15,n), 0, 100).round(2)
+    comp     = ((dur > 60) & (np.random.random(n) > 0.3)).astype(int)
+    hours    = np.random.randint(0, 24, size=n)
+    devs     = np.random.choice(devices, size=n)
+
+    sessions = pd.DataFrame({
+        "session_id"      : range(1, n+1),
+        "student_id"      : sid,
+        "module_id"       : mid,
+        "duration_minutes": dur,
+        "videos_watched"  : vids,
+        "quiz_score"      : scores,
+        "completed"       : comp,
+        "login_hour"      : hours,
+        "device_type"     : devs
+    })
+
+    # Feature engineering
+    stats_df = sessions.groupby("student_id").agg(
+        total_sessions  =("session_id",        "count"),
+        avg_duration    =("duration_minutes",  "mean"),
+        avg_quiz_score  =("quiz_score",         "mean"),
+        total_videos    =("videos_watched",     "sum"),
+        completion_rate =("completed",          "mean"),
+        unique_modules  =("module_id",          "nunique")
+    ).reset_index()
+
+    scaler = MinMaxScaler()
+    cols   = ["total_sessions","avg_duration","avg_quiz_score",
+              "total_videos","completion_rate","unique_modules"]
+    scaled = scaler.fit_transform(stats_df[cols])
+    s      = pd.DataFrame(scaled, columns=[f"{c}_s" for c in cols])
+
+    stats_df["engagement_score"] = (
+        s["total_sessions_s"]  * 0.15 +
+        s["avg_duration_s"]    * 0.20 +
+        s["avg_quiz_score_s"]  * 0.30 +
+        s["total_videos_s"]    * 0.10 +
+        s["completion_rate_s"] * 0.20 +
+        s["unique_modules_s"]  * 0.05
+    ).round(4)
+
+    stats_df["completion_velocity"] = (
+        stats_df["completion_rate"] /
+        (stats_df["avg_duration"] / 60 + 0.001)
+    ).round(4)
+
+    stats_df["risk_flag"] = (
+        (stats_df["avg_quiz_score"]  < 50) |
+        (stats_df["completion_rate"] < 0.3) |
+        (stats_df["total_sessions"]  < 5)
+    ).astype(int)
+
+    df = students.merge(stats_df, on="student_id", how="inner")
     return students, sessions, modules, df
 
+
 students, sessions, modules, df = load_data()
-session_modules = sessions.merge(
-    modules[["module_id","module_name","difficulty"]], on="module_id"
-)
+sm_data = sessions.merge(modules[["module_id","module_name","difficulty"]], on="module_id")
 
-
-# ── Sidebar filters ──────────────────────────────────────────
+# ── Sidebar ──────────────────────────────────────────────────
 st.sidebar.markdown("##  Filters")
-st.sidebar.markdown("---")
-
-selected_device = st.sidebar.multiselect(
-    "Device Type",
-    options=sessions["device_type"].unique().tolist(),
+sel_device = st.sidebar.multiselect(
+    "Device Type", sessions["device_type"].unique().tolist(),
     default=sessions["device_type"].unique().tolist()
 )
-
-selected_gender = st.sidebar.multiselect(
-    "Gender",
-    options=students["gender"].unique().tolist(),
+sel_gender = st.sidebar.multiselect(
+    "Gender", students["gender"].unique().tolist(),
     default=students["gender"].unique().tolist()
 )
-
-duration_range = st.sidebar.slider(
-    "Study Duration (minutes)",
-    min_value=int(sessions["duration_minutes"].min()),
-    max_value=int(sessions["duration_minutes"].max()),
-    value=(int(sessions["duration_minutes"].min()),
-           int(sessions["duration_minutes"].max()))
+dur_range = st.sidebar.slider(
+    "Study Duration (min)",
+    int(sessions["duration_minutes"].min()),
+    int(sessions["duration_minutes"].max()),
+    (int(sessions["duration_minutes"].min()),
+     int(sessions["duration_minutes"].max()))
 )
-
 st.sidebar.markdown("---")
-st.sidebar.markdown("**EduPulse v1.0**")
-st.sidebar.markdown("DSCE · CSE · 2025-26")
+st.sidebar.markdown("**EduPulse v1.0**  \nDSCE · CSE · 2024-25")
 
-# Apply filters
-filtered_sessions = sessions[
-    (sessions["device_type"].isin(selected_device)) &
-    (sessions["duration_minutes"] >= duration_range[0]) &
-    (sessions["duration_minutes"] <= duration_range[1])
+fs = sessions[
+    sessions["device_type"].isin(sel_device) &
+    (sessions["duration_minutes"] >= dur_range[0]) &
+    (sessions["duration_minutes"] <= dur_range[1])
 ]
-filtered_students = students[students["gender"].isin(selected_gender)]
-filtered_df = df[df["gender"].isin(selected_gender)]
+fstu = students[students["gender"].isin(sel_gender)]
+fdf  = df[df["gender"].isin(sel_gender)]
+
+# ── Title ────────────────────────────────────────────────────
+st.markdown('<p class="main-title"> EduPulse — Statistical Intelligence Engine</p>', unsafe_allow_html=True)
+st.markdown('<p class="sub-title">Real-time analysis · OULAD Dataset · DSCE CSE 2024-25</p>', unsafe_allow_html=True)
+
+page = st.selectbox("Navigate to", [
+    " Overview", " Statistical Analysis",
+    " At-Risk Predictor", " Module Analysis"
+])
 
 
-# ── Main title ───────────────────────────────────────────────
-st.markdown('<p class="main-title"> EduPulse — Statistical Intelligence Engine</p>',
-            unsafe_allow_html=True)
-st.markdown('<p class="sub-title">Real-time analysis of e-learning platform usage · OULAD Dataset · DSCE CSE 2025-26</p>',
-            unsafe_allow_html=True)
-
-
-# ── Page navigation ──────────────────────────────────────────
-page = st.selectbox(
-    "Navigate to",
-    [" Overview", " Statistical Analysis",
-     " At-Risk Predictor", " Module Analysis"]
-)
-
-
-# ════════════════════════════════════════════════════════════
-# PAGE 1 — OVERVIEW
-# ════════════════════════════════════════════════════════════
+# ── PAGE 1: OVERVIEW ────────────────────────────────────────
 if page == " Overview":
-
-    # KPI metrics row
-    col1, col2, col3, col4 = st.columns(4)
-    with col1:
-        st.metric("Total Students",  f"{len(filtered_students):,}")
-    with col2:
-        st.metric("Total Sessions",  f"{len(filtered_sessions):,}")
-    with col3:
-        st.metric("Avg Quiz Score",
-                  f"{filtered_sessions['quiz_score'].mean():.1f}")
-    with col4:
-        st.metric("Completion Rate",
-                  f"{filtered_sessions['completed'].mean()*100:.1f}%")
-
+    c1,c2,c3,c4 = st.columns(4)
+    c1.metric("Total Students",  len(fstu))
+    c2.metric("Total Sessions",  len(fs))
+    c3.metric("Avg Quiz Score",  f"{fs['quiz_score'].mean():.1f}")
+    c4.metric("Completion Rate", f"{fs['completed'].mean()*100:.1f}%")
     st.markdown("---")
-    col_l, col_r = st.columns(2)
 
-    with col_l:
-        st.markdown('<p class="section-header">Quiz Score Distribution</p>',
-                    unsafe_allow_html=True)
-        fig = px.histogram(
-            filtered_sessions, x="quiz_score", nbins=30,
-            color_discrete_sequence=["#1D9E75"],
-            labels={"quiz_score":"Quiz Score","count":"Sessions"}
-        )
-        fig.add_vline(
-            x=filtered_sessions["quiz_score"].mean(),
-            line_dash="dash", line_color="red",
-            annotation_text=f"Mean: {filtered_sessions['quiz_score'].mean():.1f}"
-        )
-        fig.update_layout(showlegend=False, height=350)
+    col1, col2 = st.columns(2)
+    with col1:
+        st.markdown('<p class="sec-header">Quiz Score Distribution</p>', unsafe_allow_html=True)
+        fig = px.histogram(fs, x="quiz_score", nbins=30,
+                           color_discrete_sequence=["#1D9E75"])
+        fig.add_vline(x=fs["quiz_score"].mean(), line_dash="dash",
+                      line_color="red",
+                      annotation_text=f"Mean:{fs['quiz_score'].mean():.1f}")
+        fig.update_layout(height=350, showlegend=False)
         st.plotly_chart(fig, use_container_width=True)
 
-    with col_r:
-        st.markdown('<p class="section-header">Sessions by Device Type</p>',
-                    unsafe_allow_html=True)
-        device_counts = filtered_sessions["device_type"].value_counts().reset_index()
-        device_counts.columns = ["device","count"]
-        fig2 = px.pie(
-            device_counts, names="device", values="count",
-            color_discrete_sequence=["#1D9E75","#185FA5","#534AB7"]
-        )
+    with col2:
+        st.markdown('<p class="sec-header">Sessions by Device</p>', unsafe_allow_html=True)
+        dc = fs["device_type"].value_counts().reset_index()
+        dc.columns = ["device","count"]
+        fig2 = px.pie(dc, names="device", values="count",
+                      color_discrete_sequence=["#1D9E75","#185FA5","#534AB7"])
         fig2.update_layout(height=350)
         st.plotly_chart(fig2, use_container_width=True)
 
-    # Login hour heatmap
-    st.markdown('<p class="section-header">When Do Students Study?</p>',
-                unsafe_allow_html=True)
-    hourly = filtered_sessions.groupby("login_hour")["session_id"].count().reset_index()
+    st.markdown('<p class="sec-header">When Do Students Study?</p>', unsafe_allow_html=True)
+    hourly = fs.groupby("login_hour")["session_id"].count().reset_index()
     hourly.columns = ["hour","count"]
-    fig3 = px.bar(
-        hourly, x="hour", y="count",
-        color="count", color_continuous_scale="Greens",
-        labels={"hour":"Hour of Day","count":"Sessions"}
-    )
-    fig3.update_layout(height=300, showlegend=False)
+    fig3 = px.bar(hourly, x="hour", y="count",
+                  color="count", color_continuous_scale="Greens",
+                  labels={"hour":"Hour of Day","count":"Sessions"})
+    fig3.update_layout(height=300)
     st.plotly_chart(fig3, use_container_width=True)
 
-    # Gender distribution
-    st.markdown('<p class="section-header">Student Demographics</p>',
-                unsafe_allow_html=True)
-    col_a, col_b = st.columns(2)
-    with col_a:
-        gender_counts = filtered_students["gender"].value_counts().reset_index()
-        gender_counts.columns = ["gender","count"]
-        fig4 = px.bar(gender_counts, x="gender", y="count",
-                      color_discrete_sequence=["#1D9E75"],
-                      labels={"gender":"Gender","count":"Students"})
+    col3, col4 = st.columns(2)
+    with col3:
+        st.markdown('<p class="sec-header">Gender Distribution</p>', unsafe_allow_html=True)
+        gc = fstu["gender"].value_counts().reset_index()
+        gc.columns = ["gender","count"]
+        fig4 = px.bar(gc, x="gender", y="count",
+                      color_discrete_sequence=["#1D9E75"])
         fig4.update_layout(height=300)
         st.plotly_chart(fig4, use_container_width=True)
-    with col_b:
-        loc_counts = filtered_students["location"].value_counts().reset_index()
-        loc_counts.columns = ["location","count"]
-        fig5 = px.bar(loc_counts, x="count", y="location",
-                      orientation="h",
-                      color_discrete_sequence=["#185FA5"],
-                      labels={"location":"City","count":"Students"})
+    with col4:
+        st.markdown('<p class="sec-header">Students by City</p>', unsafe_allow_html=True)
+        lc = fstu["location"].value_counts().reset_index()
+        lc.columns = ["city","count"]
+        fig5 = px.bar(lc, x="count", y="city", orientation="h",
+                      color_discrete_sequence=["#185FA5"])
         fig5.update_layout(height=300)
         st.plotly_chart(fig5, use_container_width=True)
 
 
-# ════════════════════════════════════════════════════════════
-# PAGE 2 — STATISTICAL ANALYSIS
-# ════════════════════════════════════════════════════════════
-elif page == "Statistical Analysis":
-
-    st.markdown('<p class="section-header">T-Test: Completed vs Incomplete Sessions</p>',
-                unsafe_allow_html=True)
-
-    completed  = filtered_sessions[filtered_sessions["completed"]==1]["quiz_score"]
-    incomplete = filtered_sessions[filtered_sessions["completed"]==0]["quiz_score"]
-    t_stat, p_val = stats.ttest_ind(completed, incomplete)
-
-    col1, col2, col3 = st.columns(3)
-    col1.metric("Completed Mean",   f"{completed.mean():.2f}")
-    col2.metric("Incomplete Mean",  f"{incomplete.mean():.2f}")
-    col3.metric("P-Value", f"{p_val:.6f}",
-                delta="Significant " if p_val < 0.05 else "Not significant")
-
-    fig_tt = px.box(
-        filtered_sessions, x="completed", y="quiz_score",
-        color="completed",
-        color_discrete_map={0:"#E74C3C", 1:"#1D9E75"},
-        labels={"completed":"Completed (1=Yes)","quiz_score":"Quiz Score"}
-    )
-    fig_tt.update_layout(height=400, showlegend=False)
-    st.plotly_chart(fig_tt, use_container_width=True)
+# ── PAGE 2: STATISTICAL ANALYSIS ────────────────────────────
+elif page == " Statistical Analysis":
+    st.markdown('<p class="sec-header">T-Test: Completed vs Incomplete Sessions</p>', unsafe_allow_html=True)
+    comp_g   = fs[fs["completed"]==1]["quiz_score"]
+    incomp_g = fs[fs["completed"]==0]["quiz_score"]
+    t_s, p_v = stats.ttest_ind(comp_g, incomp_g)
+    c1,c2,c3 = st.columns(3)
+    c1.metric("Completed Mean",  f"{comp_g.mean():.2f}")
+    c2.metric("Incomplete Mean", f"{incomp_g.mean():.2f}")
+    c3.metric("P-Value", f"{p_v:.6f}",
+              delta="✅ Significant" if p_v < 0.05 else "❌ Not significant")
+    fig_t = px.box(fs, x="completed", y="quiz_score", color="completed",
+                   color_discrete_map={0:"#E74C3C",1:"#1D9E75"})
+    fig_t.update_layout(height=380, showlegend=False)
+    st.plotly_chart(fig_t, use_container_width=True)
 
     st.markdown("---")
-    st.markdown('<p class="section-header">OLS Regression: Predicting Quiz Score</p>',
-                unsafe_allow_html=True)
-
-    X = filtered_sessions[["duration_minutes","videos_watched","completed"]].copy()
-    y = filtered_sessions["quiz_score"]
-    X_const = sm.add_constant(X)
-    model   = sm.OLS(y, X_const).fit()
-
-    col_r1, col_r2 = st.columns(2)
-    col_r1.metric("R-Squared",
-                  f"{model.rsquared:.4f}",
-                  f"Model explains {model.rsquared*100:.1f}% of variance")
-    col_r2.metric("F-Statistic", f"{model.fvalue:.2f}",
-                  f"p = {model.f_pvalue:.6f}")
-
+    st.markdown('<p class="sec-header">OLS Regression: What Predicts Quiz Score?</p>', unsafe_allow_html=True)
+    X     = fs[["duration_minutes","videos_watched","completed"]].copy()
+    y     = fs["quiz_score"]
+    Xc    = sm.add_constant(X)
+    model = sm.OLS(y, Xc).fit()
+    c1,c2 = st.columns(2)
+    c1.metric("R-Squared", f"{model.rsquared:.4f}",
+              f"Explains {model.rsquared*100:.1f}% of variance")
+    c2.metric("F-Statistic", f"{model.fvalue:.2f}",
+              f"p = {model.f_pvalue:.6f}")
     coef_df = pd.DataFrame({
         "Feature"    : model.params.index,
         "Coefficient": model.params.values.round(4),
-        "P-Value"    : model.pvalues.values.round(4),
-        "Significant": ["✅" if p < 0.05 else "❌"
-                        for p in model.pvalues.values]
+        "P-Value"    : model.pvalues.round(4),
+        "Significant": ["✅" if p < 0.05 else "❌" for p in model.pvalues]
     })
     st.dataframe(coef_df, use_container_width=True)
 
     st.markdown("---")
-    st.markdown('<p class="section-header">ANOVA: Quiz Score by Device Type</p>',
-                unsafe_allow_html=True)
-
-    mob = filtered_sessions[filtered_sessions["device_type"]=="Mobile" ]["quiz_score"]
-    des = filtered_sessions[filtered_sessions["device_type"]=="Desktop"]["quiz_score"]
-    tab = filtered_sessions[filtered_sessions["device_type"]=="Tablet" ]["quiz_score"]
-    f_s, p_a = stats.f_oneway(mob, des, tab)
-
-    col_a1, col_a2 = st.columns(2)
-    col_a1.metric("F-Statistic", f"{f_s:.4f}")
-    col_a2.metric("P-Value", f"{p_a:.6f}",
-                  delta="Significant " if p_a < 0.05 else "Not significant")
-
-    fig_an = px.box(
-        filtered_sessions, x="device_type", y="quiz_score",
-        color="device_type",
-        color_discrete_map={
-            "Mobile":"#1D9E75","Desktop":"#185FA5","Tablet":"#534AB7"
-        },
-        labels={"device_type":"Device","quiz_score":"Quiz Score"}
-    )
-    fig_an.update_layout(height=400, showlegend=False)
+    st.markdown('<p class="sec-header">ANOVA: Quiz Score by Device Type</p>', unsafe_allow_html=True)
+    mob = fs[fs["device_type"]=="Mobile" ]["quiz_score"]
+    des = fs[fs["device_type"]=="Desktop"]["quiz_score"]
+    tab = fs[fs["device_type"]=="Tablet" ]["quiz_score"]
+    f_s2, p_a = stats.f_oneway(mob, des, tab)
+    c1,c2 = st.columns(2)
+    c1.metric("F-Statistic", f"{f_s2:.4f}")
+    c2.metric("P-Value", f"{p_a:.6f}",
+              delta=" Significant" if p_a < 0.05 else "Not significant")
+    fig_an = px.box(fs, x="device_type", y="quiz_score", color="device_type",
+                    color_discrete_map={"Mobile":"#1D9E75","Desktop":"#185FA5","Tablet":"#534AB7"})
+    fig_an.update_layout(height=380, showlegend=False)
     st.plotly_chart(fig_an, use_container_width=True)
 
     st.markdown("---")
-    st.markdown('<p class="section-header">Engagement Score vs Academic Performance</p>',
-                unsafe_allow_html=True)
-
-    fig_sc = px.scatter(
-        filtered_df, x="engagement_score", y="avg_quiz_score",
-        color="risk_flag",
-        color_discrete_map={0:"#1D9E75", 1:"#E74C3C"},
-        labels={
-            "engagement_score":"Engagement Score",
-            "avg_quiz_score":"Avg Quiz Score",
-            "risk_flag":"At Risk"
-        },
-        trendline="ols"
-    )
+    st.markdown('<p class="sec-header">Engagement Score vs Performance</p>', unsafe_allow_html=True)
+    fig_sc = px.scatter(fdf, x="engagement_score", y="avg_quiz_score",
+                        color="risk_flag",
+                        color_discrete_map={0:"#1D9E75",1:"#E74C3C"},
+                        trendline="ols",
+                        labels={"engagement_score":"Engagement Score",
+                                "avg_quiz_score":"Avg Quiz Score",
+                                "risk_flag":"At Risk"})
     fig_sc.update_layout(height=400)
     st.plotly_chart(fig_sc, use_container_width=True)
 
 
-# ════════════════════════════════════════════════════════════
-# PAGE 3 — AT-RISK PREDICTOR
-# ════════════════════════════════════════════════════════════
+# ── PAGE 3: AT-RISK PREDICTOR ────────────────────────────────
 elif page == " At-Risk Predictor":
+    st.markdown('<p class="sec-header">At-Risk Student Detection</p>', unsafe_allow_html=True)
+    ar  = fdf["risk_flag"].sum()
+    saf = len(fdf) - ar
+    c1,c2,c3 = st.columns(3)
+    c1.metric("Total Students", len(fdf))
+    c2.metric("At-Risk ",     ar)
+    c3.metric("Safe ",        saf)
 
-    st.markdown('<p class="section-header">At-Risk Student Detection</p>',
-                unsafe_allow_html=True)
+    fig_p = px.pie(values=[saf, ar], names=["Safe","At-Risk"],
+                   color_discrete_sequence=["#1D9E75","#E74C3C"])
+    fig_p.update_layout(height=350)
+    st.plotly_chart(fig_p, use_container_width=True)
 
-    col1, col2, col3 = st.columns(3)
-    at_risk_count = filtered_df["risk_flag"].sum()
-    safe_count    = len(filtered_df) - at_risk_count
-    col1.metric("Total Students",  len(filtered_df))
-    col2.metric("At-Risk ",      at_risk_count)
-    col3.metric("Safe ",         safe_count)
+    st.markdown('<p class="sec-header">Engagement Score by Risk Group</p>', unsafe_allow_html=True)
+    fig_h = px.histogram(fdf, x="engagement_score", color="risk_flag",
+                         barmode="overlay", nbins=30,
+                         color_discrete_map={0:"#1D9E75",1:"#E74C3C"})
+    fig_h.update_layout(height=350)
+    st.plotly_chart(fig_h, use_container_width=True)
 
-    fig_risk = px.pie(
-        values=[safe_count, at_risk_count],
-        names=["Safe","At-Risk"],
-        color_discrete_sequence=["#1D9E75","#E74C3C"]
-    )
-    fig_risk.update_layout(height=350)
-    st.plotly_chart(fig_risk, use_container_width=True)
-
-    st.markdown('<p class="section-header">Engagement Score Distribution by Risk</p>',
-                unsafe_allow_html=True)
-    fig_eng = px.histogram(
-        filtered_df, x="engagement_score",
-        color="risk_flag",
-        color_discrete_map={0:"#1D9E75", 1:"#E74C3C"},
-        barmode="overlay", nbins=30,
-        labels={"engagement_score":"Engagement Score",
-                "risk_flag":"At Risk (1=Yes)"}
-    )
-    fig_eng.update_layout(height=350)
-    st.plotly_chart(fig_eng, use_container_width=True)
-
-    st.markdown('<p class="section-header">At-Risk Students Table</p>',
-                unsafe_allow_html=True)
-    risk_students = filtered_df[filtered_df["risk_flag"]==1][[
+    st.markdown('<p class="sec-header">At-Risk Students Table</p>', unsafe_allow_html=True)
+    risk_tbl = fdf[fdf["risk_flag"]==1][[
         "student_id","name","engagement_score",
         "avg_quiz_score","completion_rate","total_sessions"
-    ]].sort_values("engagement_score").head(20)
-    risk_students.columns = [
-        "ID","Name","Engagement","Avg Quiz",
-        "Completion Rate","Sessions"
-    ]
-    risk_students = risk_students.round(3)
-    st.dataframe(risk_students, use_container_width=True)
+    ]].sort_values("engagement_score").head(20).round(3)
+    risk_tbl.columns = ["ID","Name","Engagement","Avg Quiz","Completion","Sessions"]
+    st.dataframe(risk_tbl, use_container_width=True)
 
 
-# ════════════════════════════════════════════════════════════
-# PAGE 4 — MODULE ANALYSIS
-# ════════════════════════════════════════════════════════════
+# ── PAGE 4: MODULE ANALYSIS ──────────────────────────────────
 elif page == " Module Analysis":
-
-    st.markdown('<p class="section-header">Module Popularity</p>',
-                unsafe_allow_html=True)
-
-    sm_filtered = filtered_sessions.merge(
-        modules[["module_id","module_name","difficulty","category"]],
-        on="module_id"
-    )
-    module_stats = sm_filtered.groupby("module_name").agg(
-        sessions      = ("session_id",       "count"),
-        avg_score     = ("quiz_score",        "mean"),
-        avg_duration  = ("duration_minutes", "mean"),
-        completion    = ("completed",         "mean")
+    fs_mod = fs.merge(modules[["module_id","module_name"]], on="module_id")
+    mod_stats = fs_mod.groupby("module_name").agg(
+        sessions    =("session_id",        "count"),
+        avg_score   =("quiz_score",         "mean"),
+        avg_duration=("duration_minutes",  "mean"),
+        completion  =("completed",          "mean")
     ).reset_index().round(2)
 
-    fig_mod = px.bar(
-        module_stats.sort_values("sessions", ascending=True),
-        x="sessions", y="module_name",
-        orientation="h",
-        color="avg_score",
-        color_continuous_scale="Greens",
-        labels={"sessions":"Sessions","module_name":"Module",
-                "avg_score":"Avg Score"}
+    st.markdown('<p class="sec-header">Module Popularity</p>', unsafe_allow_html=True)
+    fig_m = px.bar(
+        mod_stats.sort_values("sessions", ascending=True),
+        x="sessions", y="module_name", orientation="h",
+        color="avg_score", color_continuous_scale="Greens",
+        labels={"sessions":"Sessions","module_name":"Module"}
     )
-    fig_mod.update_layout(height=450)
-    st.plotly_chart(fig_mod, use_container_width=True)
+    fig_m.update_layout(height=450)
+    st.plotly_chart(fig_m, use_container_width=True)
 
-    st.markdown('<p class="section-header">Module Performance Summary</p>',
-                unsafe_allow_html=True)
-    module_stats.columns = [
-        "Module","Sessions","Avg Score","Avg Duration(min)","Completion Rate"
-    ]
-    st.dataframe(module_stats, use_container_width=True)
+    st.markdown('<p class="sec-header">Module Performance Table</p>', unsafe_allow_html=True)
+    mod_stats.columns = ["Module","Sessions","Avg Score","Avg Duration","Completion"]
+    st.dataframe(mod_stats, use_container_width=True)
 
-    st.markdown('<p class="section-header">Score vs Duration by Module</p>',
-                unsafe_allow_html=True)
-    fig_scatter = px.scatter(
-        sm_filtered.sample(min(2000, len(sm_filtered))),
+    st.markdown('<p class="sec-header">Score vs Duration</p>', unsafe_allow_html=True)
+    fig_sc2 = px.scatter(
+        fs_mod.sample(min(2000,len(fs_mod))),
         x="duration_minutes", y="quiz_score",
-        color="module_name",
-        labels={"duration_minutes":"Duration (min)",
-                "quiz_score":"Quiz Score",
-                "module_name":"Module"},
-        opacity=0.6
+        color="module_name", opacity=0.5,
+        labels={"duration_minutes":"Duration (min)","quiz_score":"Quiz Score"}
     )
-    fig_scatter.update_layout(height=450)
-    st.plotly_chart(fig_scatter, use_container_width=True)
+    fig_sc2.update_layout(height=450)
+    st.plotly_chart(fig_sc2, use_container_width=True)
