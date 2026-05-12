@@ -1,0 +1,41 @@
+EduPulse — Statistical Analysis Report
+==================================================
+
+TEST 1 — Independent T-Test
+Question: Do students who complete modules score higher on quizzes?
+   Completed   group mean : 70.20
+   Incomplete  group mean : 46.55
+   T-statistic            : 44.1767
+   P-value                : 0.000000
+   Result: SIGNIFICANT — completion strongly predicts quiz score (p < 0.05)
+
+TEST 2 — Pearson Correlation
+Question: Does studying longer lead to higher quiz scores?
+   Correlation coefficient : 0.5434
+   P-value                 : 0.000000
+   Result:  STRONG correlation found
+
+TEST 3 — One-Way ANOVA
+Question: Does quiz score differ by device type?
+   Mobile  mean : 49.97
+   Desktop mean : 50.03
+   Tablet  mean : 48.71
+   F-statistic  : 4.6878
+   P-value      : 0.009232
+   Result:  SIGNIFICANT — device type affects performance
+
+TEST 4 — OLS Multiple Regression
+Question: What predicts quiz score best?
+   R-squared  : 0.2961  (model explains 29.6% of variance)
+   F-statistic: 1121.3770  (p = 0.000000)
+   Coefficients:
+      const                coef= 41.2193  p=0.0000   significant
+      duration_minutes     coef=  0.1930  p=0.0000   significant
+      videos_watched       coef=  1.8227  p=0.0025   significant
+      completed            coef= -0.0509  p=0.9531  not significant
+
+TEST 5 — Engagement Score Validation
+Question: Does our engagement score predict academic performance?
+   Correlation : 0.7666
+   P-value     : 0.000000
+   Result:  Engagement score is a valid predictor

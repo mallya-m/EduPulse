@@ -1,0 +1,13 @@
+At-Risk Student Prediction Model
+================================
+Algorithm  : Logistic Regression
+Students   : 136
+At-risk    : 120 (88.2%)
+Accuracy   : 89.3%
+
+Feature Importance:
+  engagement_score: -0.5215
+  completion_velocity: -1.3083
+  avg_duration: -0.2884
+  total_sessions: +0.2381
+  completion_rate: -0.7279
