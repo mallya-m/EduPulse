@@ -1,0 +1,5 @@
+Dashboard deployed: https://edupulse-ofctgpwntfzz83fezmfnvt.streamlit.app
+Verified by: Pari Tirthwani
+Date: 2026-05-12 06:43
+Charts: quiz_score_distribution, duration_by_device, popular_modules, login_hour_heatmap
+Status: All charts committed
