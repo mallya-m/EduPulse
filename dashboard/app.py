@@ -80,6 +80,18 @@ section[data-testid="stSidebar"] p {{
     color:{LABEL_C} !important;
     font-weight:600 !important;
 }}
+section[data-testid="stSidebar"] span,
+section[data-testid="stSidebar"] div[role="option"],
+section[data-testid="stSidebar"] li {{
+    color:{TEXT_C} !important;
+}}
+section[data-testid="stSidebar"] span[data-baseweb="tag"] span {{
+    color:{TEXT_C} !important;
+    font-weight:600 !important;
+}}
+section[data-testid="stSidebar"] [data-testid="stMultiSelect"] span {{
+    color:{TEXT_C} !important;
+}}
 
 /* Multiselect tags */
 section[data-testid="stSidebar"] span[data-baseweb="tag"] {{
