@@ -93,11 +93,26 @@ section[data-testid="stSidebar"] [data-testid="stMultiSelect"] span {{
     color:{TEXT_C} !important;
 }}
 
-/* Multiselect tags */
-section[data-testid="stSidebar"] span[data-baseweb="tag"] {{
+/* Multiselect tags - FIX */
+section[data-testid="stSidebar"] [data-baseweb="tag"] {
     background-color:{rgba(T,0.2)} !important;
+    border:1px solid {T} !important;
+}
+
+section[data-testid="stSidebar"] [data-baseweb="tag"] * {
     color:{TEXT_C} !important;
-}}
+    opacity:1 !important;
+    font-weight:600 !important;
+}
+
+section[data-testid="stSidebar"] [data-baseweb="tag"] span {
+    color:{TEXT_C} !important;
+}
+
+section[data-testid="stSidebar"] [data-baseweb="tag"] svg {
+    color:{TEXT_C} !important;
+    fill:{TEXT_C} !important;
+}
 
 /* Metric cards */
 [data-testid="stMetric"] {{
@@ -685,3 +700,7 @@ elif page == "📡 Module Intelligence":
         display = mod_stats.copy()
         display.columns = ["Module","Difficulty","Category","Sessions","Avg Score","Avg Duration","Completion","Avg Videos"]
         dfshow(display, h=320)
+
+        [data-testid="stSidebar"] div[data-baseweb="select"] * {
+    color: inherit !important;
+}
