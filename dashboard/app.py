@@ -701,6 +701,4 @@ elif page == "📡 Module Intelligence":
         display.columns = ["Module","Difficulty","Category","Sessions","Avg Score","Avg Duration","Completion","Avg Videos"]
         dfshow(display, h=320)
 
-        [data-testid="stSidebar"] div[data-baseweb="select"] * {
-    color: inherit !important;
-}
+       
