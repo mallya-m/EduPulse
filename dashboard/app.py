@@ -85,34 +85,41 @@ section[data-testid="stSidebar"] div[role="option"],
 section[data-testid="stSidebar"] li {{
     color:{TEXT_C} !important;
 }}
-section[data-testid="stSidebar"] [data-baseweb="tag"] * {
+section[data-testid="stSidebar"] span[data-baseweb="tag"] span {{
     color:{TEXT_C} !important;
     font-weight:600 !important;
-}
+}}
 section[data-testid="stSidebar"] [data-testid="stMultiSelect"] span {{
     color:{TEXT_C} !important;
 }}
 
-/* Multiselect tags - FIX */
-section[data-testid="stSidebar"] [data-baseweb="tag"] {
+/* Multiselect tags */
+section[data-testid="stSidebar"] span[data-baseweb="tag"] {{
     background-color:{rgba(T,0.2)} !important;
-    border:1px solid {T} !important;
-}
-
-section[data-testid="stSidebar"] [data-baseweb="tag"] * {
     color:{TEXT_C} !important;
-    opacity:1 !important;
+}}
+/* Multiselect dropdown options and selected values */
+section[data-testid="stSidebar"] [data-baseweb="select"] span,
+section[data-testid="stSidebar"] [data-baseweb="select"] div,
+section[data-testid="stSidebar"] [data-baseweb="tag"] span,
+section[data-testid="stSidebar"] ul li span,
+section[data-testid="stSidebar"] ul li div,
+section[data-testid="stSidebar"] [role="listbox"] span,
+section[data-testid="stSidebar"] [role="option"] span,
+section[data-testid="stSidebar"] [role="option"] div {{
+    color:{TEXT_C} !important;
+}}
+/* Slider value labels */
+section[data-testid="stSidebar"] [data-testid="stTickBarMin"],
+section[data-testid="stSidebar"] [data-testid="stTickBarMax"],
+section[data-testid="stSidebar"] .stSlider p {{
+    color:{TEXT_C} !important;
+}}
+/* Fix the actual text inside multiselect chips/tags */
+section[data-testid="stSidebar"] span[data-baseweb="tag"] > span {{
+    color:{TEXT_C} !important;
     font-weight:600 !important;
-}
-
-section[data-testid="stSidebar"] [data-baseweb="tag"] span {
-    color:{TEXT_C} !important;
-}
-
-section[data-testid="stSidebar"] [data-baseweb="tag"] svg {
-    color:{TEXT_C} !important;
-    fill:{TEXT_C} !important;
-}
+}}
 
 /* Metric cards */
 [data-testid="stMetric"] {{
@@ -700,4 +707,3 @@ elif page == "📡 Module Intelligence":
         display = mod_stats.copy()
         display.columns = ["Module","Difficulty","Category","Sessions","Avg Score","Avg Duration","Completion","Avg Videos"]
         dfshow(display, h=320)
-
