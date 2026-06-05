@@ -55,7 +55,7 @@ def dfshow(d, h=None):
     if h: st.dataframe(d, use_container_width=True, height=h)
     else: st.dataframe(d, use_container_width=True)
 
-# ── CSS: FIX 1 — sidebar widget labels visible in dark mode ──
+# ── CSS ───────────────────────────────────────────────────────
 st.markdown(f"""
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&family=Inter:wght@300;400;500;600&display=swap');
@@ -72,7 +72,7 @@ section[data-testid="stSidebar"] {{
     min-width:280px !important;
 }}
 
-/* FIX: Make ALL sidebar widget labels visible in dark mode */
+/* Sidebar labels — headings */
 section[data-testid="stSidebar"] label,
 section[data-testid="stSidebar"] .stMultiSelect label,
 section[data-testid="stSidebar"] .stSlider label,
@@ -80,58 +80,35 @@ section[data-testid="stSidebar"] p {{
     color:{LABEL_C} !important;
     font-weight:600 !important;
 }}
-section[data-testid="stSidebar"] span,
-section[data-testid="stSidebar"] div[role="option"],
-section[data-testid="stSidebar"] li {{
-    color:{TEXT_C} !important;
+
+/* Multiselect selected chip text */
+section[data-testid="stSidebar"] span[data-baseweb="tag"] {{
+    background-color:{"#1A3A5C" if dm else "#E0E7FF"} !important;
+    border:1px solid {T} !important;
 }}
-section[data-testid="stSidebar"] span[data-baseweb="tag"] span {{
-    color:{TEXT_C} !important;
+section[data-testid="stSidebar"] span[data-baseweb="tag"] span,
+section[data-testid="stSidebar"] span[data-baseweb="tag"] > span {{
+    color:{"#FFFFFF" if dm else "#1A1A2E"} !important;
     font-weight:600 !important;
+    font-size:0.78rem !important;
 }}
-section[data-testid="stSidebar"] [data-testid="stMultiSelect"] span {{
+
+/* Dropdown options text */
+section[data-testid="stSidebar"] [data-baseweb="select"] span,
+section[data-testid="stSidebar"] [data-baseweb="select"] div,
+section[data-testid="stSidebar"] [role="listbox"] span,
+section[data-testid="stSidebar"] [role="option"] span,
+section[data-testid="stSidebar"] [role="option"] div,
+section[data-testid="stSidebar"] ul li span,
+section[data-testid="stSidebar"] ul li div {{
     color:{TEXT_C} !important;
 }}
 
-/* Multiselect tags — force dark text on light chip background */
-section[data-testid="stSidebar"] span[data-baseweb="tag"] {{
-    background-color:#1A3A5C !important;
-    border:1px solid #00D4FF !important;
-}}
-section[data-testid="stSidebar"] span[data-baseweb="tag"] span {{
-    color:#FFFFFF !important;
-    font-weight:700 !important;
-    font-size:0.78rem !important;
-}}
-section[data-testid="stSidebar"] span[data-baseweb="tag"] [data-testid="stMarkdownContainer"] {{
-    color:#FFFFFF !important;
-}}
-/* The actual visible text node inside every tag */
-section[data-testid="stSidebar"] [data-baseweb="tag"] > span:first-child {{
-    color:#FFFFFF !important;
-    font-weight:600 !important;
-}}
-/* Multiselect dropdown options and selected values */
-section[data-testid="stSidebar"] [data-baseweb="select"] span,
-section[data-testid="stSidebar"] [data-baseweb="select"] div,
-section[data-testid="stSidebar"] [data-baseweb="tag"] span,
-section[data-testid="stSidebar"] ul li span,
-section[data-testid="stSidebar"] ul li div,
-section[data-testid="stSidebar"] [role="listbox"] span,
-section[data-testid="stSidebar"] [role="option"] span,
-section[data-testid="stSidebar"] [role="option"] div {{
-    color:{TEXT_C} !important;
-}}
-/* Slider value labels */
+/* Slider tick labels */
 section[data-testid="stSidebar"] [data-testid="stTickBarMin"],
 section[data-testid="stSidebar"] [data-testid="stTickBarMax"],
 section[data-testid="stSidebar"] .stSlider p {{
     color:{TEXT_C} !important;
-}}
-/* Fix the actual text inside multiselect chips/tags */
-section[data-testid="stSidebar"] span[data-baseweb="tag"] > span {{
-    color:{TEXT_C} !important;
-    font-weight:600 !important;
 }}
 
 /* Metric cards */
@@ -146,6 +123,31 @@ section[data-testid="stSidebar"] span[data-baseweb="tag"] > span {{
 }}
 [data-testid="stMetricValue"] {{ color:{TEXT_C} !important; font-size:1.5rem !important; font-weight:700 !important; }}
 [data-testid="stMetricDelta"] {{ color:{G} !important; }}
+
+/* Score predictor card */
+.predictor-card {{
+    background:{CARD_BG};
+    border:1px solid {BORDER_C};
+    border-radius:14px;
+    padding:1.4rem 1.6rem;
+    margin-top:0.5rem;
+    box-shadow:0 2px 12px rgba(0,0,0,0.08);
+}}
+.predictor-result {{
+    font-family:Orbitron,monospace;
+    font-size:2.4rem;
+    font-weight:800;
+    color:{T};
+    text-align:center;
+    padding:0.6rem 0;
+}}
+.student-profile-card {{
+    background:{CARD_BG};
+    border:1px solid {BORDER_C};
+    border-radius:14px;
+    padding:1.2rem 1.4rem;
+    margin-bottom:1rem;
+}}
 
 .sec {{
     font-size:0.78rem; color:{SEC_C}; letter-spacing:2px; text-transform:uppercase;
@@ -245,6 +247,16 @@ df, sessions, modules = load_data()
 students = df[["student_id","name","age","gender","location","device_type"]].copy()
 sm_data  = sessions.merge(modules[["module_id","module_name","difficulty","category"]], on="module_id")
 
+# ── Build OLS model once at startup (used by Score Predictor) ─
+@st.cache_data
+def build_ols_model():
+    X  = sessions[["duration_minutes","videos_watched","completed"]].copy()
+    y  = sessions["quiz_score"]
+    Xc = sm.add_constant(X)
+    return sm.OLS(y, Xc).fit()
+
+ols_model = build_ols_model()
+
 
 # ══════════════════════════════════════════════════════════════
 #  SIDEBAR
@@ -262,48 +274,33 @@ with st.sidebar:
     </div>
     """, unsafe_allow_html=True)
 
-    # Dark/Light toggle
     if st.button("☀️ Light Mode" if dm else "🌙 Dark Mode", key="theme_btn", use_container_width=True):
         st.session_state.dark_mode = not dm
         st.rerun()
 
-    st.markdown(f"<div style='height:8px'></div>", unsafe_allow_html=True)
+    st.markdown("<div style='height:8px'></div>", unsafe_allow_html=True)
     st.markdown(f"<div style='font-size:0.75rem;color:{T};font-weight:700;letter-spacing:1px;margin-bottom:8px;'>⚙️ FILTERS</div>", unsafe_allow_html=True)
 
-    # Filter 1 — Device
     all_devices = sorted(sessions["device_type"].unique().tolist())
     sel_device  = st.multiselect("📱 Device Type", options=all_devices, default=all_devices, key="f_device")
     if not sel_device: sel_device = all_devices
 
-    # Filter 2 — Gender
     all_genders = sorted(students["gender"].unique().tolist())
     sel_gender  = st.multiselect("👤 Gender", options=all_genders, default=all_genders, key="f_gender")
     if not sel_gender: sel_gender = all_genders
 
-    # Filter 3 — Duration
     dmin = int(sessions["duration_minutes"].min())
     dmax = int(sessions["duration_minutes"].max())
     dur_range = st.slider("⏱️ Study Duration (min)", min_value=dmin, max_value=dmax, value=(dmin,dmax), key="f_dur")
 
-    # Filter 4 — Difficulty
     all_diffs = sorted(modules["difficulty"].unique().tolist())
     sel_diff  = st.multiselect("📚 Module Difficulty", options=all_diffs, default=all_diffs, key="f_diff")
     if not sel_diff: sel_diff = all_diffs
 
-    # Filter 5 — Quiz score
     quiz_range = st.slider("🏆 Quiz Score Range", min_value=0.0, max_value=100.0, value=(0.0,100.0), step=1.0, key="f_quiz")
 
     st.markdown("---")
 
-    # FIX 2 — Live Risk: computed from FILTERED data, not full df
-    # (we compute fs_sidebar quickly here so the box is always accurate)
-    fs_sidebar = sessions[
-        sessions["device_type"].isin(sel_device) &
-        (sessions["duration_minutes"] >= dur_range[0]) &
-        (sessions["duration_minutes"] <= dur_range[1]) &
-        (sessions["quiz_score"]       >= quiz_range[0]) &
-        (sessions["quiz_score"]       <= quiz_range[1])
-    ]
     fdf_sidebar = df[df["gender"].isin(sel_gender)]
     rp  = fdf_sidebar["risk_flag"].mean() * 100
     rc  = R if rp > 60 else O if rp > 30 else G
@@ -311,19 +308,13 @@ with st.sidebar:
     st.markdown(f"""
     <div style="text-align:center;padding:0.7rem;background:{CARD_BG};
                 border:2px solid {rc};border-radius:10px;margin:2px 0;">
-        <div style="font-size:0.60rem;color:{SUB_C};letter-spacing:2px;font-weight:600;">
-            LIVE RISK LEVEL
-        </div>
+        <div style="font-size:0.60rem;color:{SUB_C};letter-spacing:2px;font-weight:600;">LIVE RISK LEVEL</div>
         <div style="font-size:1.9rem;font-weight:800;color:{rc};
-                    font-family:Orbitron,monospace;line-height:1.2;">
-            {rp:.0f}%
-        </div>
+                    font-family:Orbitron,monospace;line-height:1.2;">{rp:.0f}%</div>
         <div style="font-size:0.7rem;color:{rc};font-weight:500;">
             {int(fdf_sidebar["risk_flag"].sum())} / {len(fdf_sidebar)} students flagged
         </div>
-        <div style="font-size:0.60rem;color:{SUB_C};margin-top:4px;">
-            Changes when you adjust Gender filter
-        </div>
+        <div style="font-size:0.60rem;color:{SUB_C};margin-top:4px;">Changes with Gender filter</div>
     </div>
     """, unsafe_allow_html=True)
 
@@ -341,10 +332,10 @@ with st.sidebar:
     <div style="font-size:0.60rem;color:{SUB_C};text-align:center;margin-top:8px;">
         DSCE · CSE · 2025-26 · EduPulse v2.0
     </div>
-    """, unsafe_allow_html=True)   # FIX 3 — year updated to 2025-26
+    """, unsafe_allow_html=True)
 
 
-# ── Apply filters to main data ────────────────────────────────
+# ── Apply filters ─────────────────────────────────────────────
 fs = sessions[
     sessions["device_type"].isin(sel_device) &
     (sessions["duration_minutes"] >= dur_range[0]) &
@@ -407,7 +398,8 @@ if page == "⚡ Command Center":
         pc(fig2)
 
     st.markdown('<div class="sec">STUDENT ACTIVITY BY HOUR OF DAY</div>', unsafe_allow_html=True)
-    hourly = fs.groupby("login_hour")["session_id"].count().reset_index(); hourly.columns=["hour","count"]
+    hourly = fs.groupby("login_hour")["session_id"].count().reset_index()
+    hourly.columns = ["hour","count"]
     fig3 = px.bar(hourly, x="hour", y="count", color="count",
                   color_continuous_scale=[[0,CARD_BG],[0.5,rgba(T,0.6)],[1,T]],
                   labels={"hour":"Hour of Day","count":"Sessions"})
@@ -425,7 +417,8 @@ if page == "⚡ Command Center":
         st.markdown('<div class="sec">GENDER SPLIT</div>', unsafe_allow_html=True)
         gc = fst["gender"].value_counts().reset_index(); gc.columns=["gender","count"]
         fig4 = px.bar(gc, x="gender", y="count", color="gender", color_discrete_sequence=[T,P,G])
-        fig4.update_traces(marker_line_width=0); dl(fig4,260); fig4.update_layout(showlegend=False); pc(fig4)
+        fig4.update_traces(marker_line_width=0); dl(fig4,260)
+        fig4.update_layout(showlegend=False); pc(fig4)
 
     with col4:
         st.markdown('<div class="sec">TOP CITIES</div>', unsafe_allow_html=True)
@@ -456,19 +449,19 @@ if page == "⚡ Command Center":
             height=260, margin=dict(l=30,r=30,t=20,b=20), showlegend=False)
         pc(fig6)
 
-    # ── NEW: Weekly engagement trend ──────────────────────────
     if "login_week" in sessions.columns:
         st.markdown('<div class="sec">WEEKLY ENGAGEMENT TREND</div>', unsafe_allow_html=True)
         weekly = fs.groupby("login_week").agg(
-            sessions=("session_id","count"),
-            avg_score=("quiz_score","mean"),
-            completion=("completed","mean")
+            sessions  = ("session_id","count"),
+            avg_score = ("quiz_score","mean"),
+            completion= ("completed","mean")
         ).reset_index()
         fig_w = go.Figure()
         fig_w.add_trace(go.Scatter(x=weekly["login_week"], y=weekly["sessions"],
             name="Sessions", line=dict(color=T,width=2.5), mode="lines+markers"))
         fig_w.add_trace(go.Scatter(x=weekly["login_week"], y=weekly["avg_score"],
-            name="Avg Score", line=dict(color=G,width=2.5,dash="dot"), mode="lines+markers", yaxis="y2"))
+            name="Avg Score", line=dict(color=G,width=2.5,dash="dot"),
+            mode="lines+markers", yaxis="y2"))
         fig_w.update_layout(
             paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor=PLOT_BG,
             font=dict(color=TEXT_C), height=280,
@@ -574,7 +567,7 @@ elif page == "🔬 Statistical Intelligence":
 
 
 # ══════════════════════════════════════════════════════════════
-#  PAGE 3 — THREAT DETECTION
+#  PAGE 3 — THREAT DETECTION  (with all 3 new features)
 # ══════════════════════════════════════════════════════════════
 elif page == "🎯 Threat Detection":
 
@@ -599,8 +592,8 @@ elif page == "🎯 Threat Detection":
             gauge=dict(
                 axis=dict(range=[0,100], tickcolor=SUB_C, tickfont=dict(color=SUB_C)),
                 bar=dict(color=gc2), bgcolor=PLOT_BG, bordercolor=GRID_C,
-                steps=[dict(range=[0,30],color=rgba(G,0.15)),
-                       dict(range=[30,60],color=rgba(O,0.15)),
+                steps=[dict(range=[0,30],  color=rgba(G,0.15)),
+                       dict(range=[30,60], color=rgba(O,0.15)),
                        dict(range=[60,100],color=rgba(R,0.15))],
                 threshold=dict(line=dict(color=Y,width=3), thickness=0.8, value=60)
             ),
@@ -639,16 +632,224 @@ elif page == "🎯 Threat Detection":
                 annotations=[dict(text=label, font=dict(color=good_color,size=11), showarrow=False)])
             col_el.plotly_chart(fp, use_container_width=True)
 
+    # ══════════════════════════════════════════════════════════
+    #  NEW FEATURE 1 — STUDENT SEARCH & PROFILE
+    # ══════════════════════════════════════════════════════════
+    st.markdown("---")
+    st.markdown('<div class="sec">🔍 STUDENT SEARCH & INDIVIDUAL PROFILE</div>', unsafe_allow_html=True)
+
+    search_query = st.text_input(
+        "Type a student name to view their full profile",
+        placeholder="e.g. Priya Sharma, Rahul...",
+        key="student_search"
+    )
+
+    if search_query.strip():
+        matched = fdf[fdf["name"].str.contains(search_query.strip(), case=False, na=False)]
+
+        if len(matched) == 0:
+            st.warning(f"No student found matching '{search_query}'. Try a partial name.")
+        else:
+            if len(matched) > 1:
+                chosen_name = st.selectbox(
+                    f"Found {len(matched)} students — select one:",
+                    matched["name"].tolist(),
+                    key="student_pick"
+                )
+                student = matched[matched["name"] == chosen_name].iloc[0]
+            else:
+                student = matched.iloc[0]
+
+            # Risk colour
+            risk_color = R if student["risk_flag"] == 1 else G
+            risk_label = "🔴 AT-RISK" if student["risk_flag"] == 1 else "🟢 SAFE"
+
+            st.markdown(f"""
+            <div class="student-profile-card">
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.8rem;">
+                    <div>
+                        <div style="font-family:Orbitron,monospace;font-size:1.1rem;
+                                    color:{T};font-weight:700;">{student['name']}</div>
+                        <div style="font-size:0.75rem;color:{SUB_C};margin-top:2px;">
+                            ID: {int(student['student_id'])} &nbsp;·&nbsp;
+                            Age: {int(student['age'])} &nbsp;·&nbsp;
+                            Gender: {student['gender']} &nbsp;·&nbsp;
+                            Location: {student['location']}
+                        </div>
+                    </div>
+                    <div style="font-family:Orbitron,monospace;font-size:0.85rem;
+                                color:{risk_color};border:2px solid {risk_color};
+                                border-radius:8px;padding:4px 12px;font-weight:700;">
+                        {risk_label}
+                    </div>
+                </div>
+            </div>
+            """, unsafe_allow_html=True)
+
+            p1,p2,p3,p4,p5,p6 = st.columns(6)
+            p1.metric("Engagement",    f"{student['engagement_score']:.3f}")
+            p2.metric("Avg Quiz",      f"{student['avg_quiz_score']:.1f}")
+            p3.metric("Completion",    f"{student['completion_rate']*100:.1f}%")
+            p4.metric("Sessions",      f"{int(student['total_sessions'])}")
+            p5.metric("Videos",        f"{int(student['total_videos'])}")
+            p6.metric("Avg Duration",  f"{student['avg_duration']:.0f} min")
+
+            # Radar chart for this student
+            st.markdown(f"<div style='font-size:0.78rem;color:{SUB_C};margin-top:0.8rem;'>Student performance radar vs cohort average</div>", unsafe_allow_html=True)
+            s_cats = ["Quiz","Completion","Sessions","Videos","Engagement"]
+            s_vals = [
+                student["avg_quiz_score"] / 100,
+                student["completion_rate"],
+                min(student["total_sessions"] / fdf["total_sessions"].max(), 1),
+                min(student["total_videos"]   / max(fdf["total_videos"].max(), 1), 1),
+                student["engagement_score"]
+            ]
+            avg_vals = [
+                fdf["avg_quiz_score"].mean() / 100,
+                fdf["completion_rate"].mean(),
+                fdf["total_sessions"].mean() / fdf["total_sessions"].max(),
+                fdf["total_videos"].mean()   / max(fdf["total_videos"].max(), 1),
+                fdf["engagement_score"].mean()
+            ]
+            fig_profile = go.Figure()
+            fig_profile.add_trace(go.Scatterpolar(
+                r=s_vals+[s_vals[0]], theta=s_cats+[s_cats[0]],
+                fill="toself", fillcolor=rgba(risk_color,0.15),
+                line=dict(color=risk_color,width=2), name=student["name"]
+            ))
+            fig_profile.add_trace(go.Scatterpolar(
+                r=avg_vals+[avg_vals[0]], theta=s_cats+[s_cats[0]],
+                fill="toself", fillcolor=rgba(T,0.08),
+                line=dict(color=T,width=1.5,dash="dot"), name="Cohort Avg"
+            ))
+            fig_profile.update_layout(
+                paper_bgcolor="rgba(0,0,0,0)",
+                polar=dict(bgcolor=PLOT_BG,
+                    radialaxis=dict(visible=True, range=[0,1], gridcolor=GRID_C,
+                                    tickfont=dict(color=SUB_C,size=8)),
+                    angularaxis=dict(gridcolor=GRID_C, tickfont=dict(color=TEXT_C,size=9))),
+                height=320, legend=dict(font=dict(color=TEXT_C)),
+                margin=dict(l=40,r=40,t=30,b=20)
+            )
+            pc(fig_profile)
+    else:
+        st.info("👆 Type a student name above to view their individual performance profile and radar chart.")
+
+    # ══════════════════════════════════════════════════════════
+    #  PRIORITY TABLE + NEW FEATURE 2 — DOWNLOAD CSV
+    # ══════════════════════════════════════════════════════════
     st.markdown("---")
     st.markdown('<div class="sec">PRIORITY INTERVENTION LIST</div>', unsafe_allow_html=True)
     st.markdown("*Students sorted by urgency — lowest engagement first*")
+
     risk_tbl = fdf[fdf["risk_flag"]==1][[
         "student_id","name","engagement_score","avg_quiz_score","completion_rate","total_sessions"
     ]].sort_values("engagement_score").head(25).round(3).copy()
     risk_tbl.columns = ["ID","Student","Engagement","Avg Quiz","Completion","Sessions"]
-    risk_tbl["Priority"] = pd.cut(risk_tbl["Engagement"],
-        bins=[0,0.2,0.4,1.01], labels=["🔴 CRITICAL","🟡 HIGH","🟢 MODERATE"])
+    risk_tbl["Priority"] = pd.cut(
+        risk_tbl["Engagement"],
+        bins=[0, 0.2, 0.4, 1.01],
+        labels=["🔴 CRITICAL","🟡 HIGH","🟢 MODERATE"]
+    )
+
+    # Download button — NEW FEATURE 2
+    dl_col1, dl_col2 = st.columns([3,1])
+    with dl_col2:
+        st.download_button(
+            label="⬇️ Download CSV",
+            data=risk_tbl.to_csv(index=False),
+            file_name="edupulse_at_risk_students.csv",
+            mime="text/csv",
+            help="Download the at-risk student list as a CSV file"
+        )
+
     dfshow(risk_tbl, h=380)
+
+    # ══════════════════════════════════════════════════════════
+    #  NEW FEATURE 3 — LIVE SCORE PREDICTOR
+    # ══════════════════════════════════════════════════════════
+    st.markdown("---")
+    st.markdown('<div class="sec">🤖 LIVE QUIZ SCORE PREDICTOR</div>', unsafe_allow_html=True)
+    st.markdown("*Enter study behaviour below — our OLS model predicts the expected quiz score*")
+
+    st.markdown(f'<div class="predictor-card">', unsafe_allow_html=True)
+
+    pred_c1, pred_c2, pred_c3 = st.columns(3)
+    with pred_c1:
+        pred_duration = st.slider(
+            "⏱️ Study Duration (min)",
+            min_value=5, max_value=180, value=60, step=5,
+            key="pred_dur",
+            help="How many minutes the student studies per session"
+        )
+    with pred_c2:
+        pred_videos = st.slider(
+            "🎬 Videos Watched",
+            min_value=0, max_value=10, value=3,
+            key="pred_vid",
+            help="Number of video lessons watched"
+        )
+    with pred_c3:
+        pred_completed = st.selectbox(
+            "✅ Module Completed?",
+            options=[0, 1],
+            format_func=lambda x: "Yes ✅" if x == 1 else "No ❌",
+            index=1,
+            key="pred_comp",
+            help="Did the student complete the module?"
+        )
+
+    # Predict using the cached OLS model
+    input_data = pd.DataFrame({
+        "const"            : [1.0],
+        "duration_minutes" : [float(pred_duration)],
+        "videos_watched"   : [float(pred_videos)],
+        "completed"        : [float(pred_completed)]
+    })
+    predicted_score = float(ols_model.predict(input_data)[0])
+    predicted_score = max(0.0, min(100.0, predicted_score))
+
+    # Score colour
+    score_color = G if predicted_score >= 60 else O if predicted_score >= 40 else R
+    score_label = "PASS ✅" if predicted_score >= 50 else "AT RISK ⚠️"
+
+    st.markdown(f"""
+    <div style="text-align:center;margin-top:1rem;padding:1rem;
+                background:{rgba(score_color,0.08)};border-radius:12px;
+                border:1px solid {score_color};">
+        <div style="font-size:0.75rem;color:{SUB_C};letter-spacing:2px;
+                    text-transform:uppercase;margin-bottom:0.3rem;">
+            PREDICTED QUIZ SCORE
+        </div>
+        <div class="predictor-result" style="color:{score_color};">
+            {predicted_score:.1f} / 100
+        </div>
+        <div style="font-size:0.85rem;color:{score_color};font-weight:700;margin-top:0.3rem;">
+            {score_label}
+        </div>
+        <div style="font-size:0.72rem;color:{SUB_C};margin-top:0.5rem;">
+            Based on OLS regression · R²=0.296 · p&lt;0.001
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
+
+    # Show formula breakdown
+    with st.expander("📐 How is this calculated?"):
+        params = ols_model.params
+        st.markdown(f"""
+        **OLS Formula:**
+        ```
+        Score = {params['const']:.2f}
+              + ({params['duration_minutes']:.4f} × {pred_duration} min)
+              + ({params['videos_watched']:.4f} × {pred_videos} videos)
+              + ({params['completed']:.4f} × {pred_completed} completed)
+              = {predicted_score:.2f}
+        ```
+        Each coefficient shows how much that factor contributes to the score.
+        Study duration has the strongest positive effect.
+        """)
+
+    st.markdown('</div>', unsafe_allow_html=True)
 
 
 # ══════════════════════════════════════════════════════════════
@@ -718,5 +919,6 @@ elif page == "📡 Module Intelligence":
 
         st.markdown('<div class="sec">COMPLETE MODULE SCORECARD</div>', unsafe_allow_html=True)
         display = mod_stats.copy()
-        display.columns = ["Module","Difficulty","Category","Sessions","Avg Score","Avg Duration","Completion","Avg Videos"]
+        display.columns = ["Module","Difficulty","Category","Sessions",
+                           "Avg Score","Avg Duration","Completion","Avg Videos"]
         dfshow(display, h=320)
