@@ -85,10 +85,10 @@ section[data-testid="stSidebar"] div[role="option"],
 section[data-testid="stSidebar"] li {{
     color:{TEXT_C} !important;
 }}
-section[data-testid="stSidebar"] span[data-baseweb="tag"] span {{
+section[data-testid="stSidebar"] [data-baseweb="tag"] * {
     color:{TEXT_C} !important;
     font-weight:600 !important;
-}}
+}
 section[data-testid="stSidebar"] [data-testid="stMultiSelect"] span {{
     color:{TEXT_C} !important;
 }}
@@ -701,4 +701,3 @@ elif page == "📡 Module Intelligence":
         display.columns = ["Module","Difficulty","Category","Sessions","Avg Score","Avg Duration","Completion","Avg Videos"]
         dfshow(display, h=320)
 
-       
