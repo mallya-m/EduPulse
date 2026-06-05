@@ -93,10 +93,23 @@ section[data-testid="stSidebar"] [data-testid="stMultiSelect"] span {{
     color:{TEXT_C} !important;
 }}
 
-/* Multiselect tags */
+/* Multiselect tags — force dark text on light chip background */
 section[data-testid="stSidebar"] span[data-baseweb="tag"] {{
-    background-color:{rgba(T,0.2)} !important;
-    color:{TEXT_C} !important;
+    background-color:#1A3A5C !important;
+    border:1px solid #00D4FF !important;
+}}
+section[data-testid="stSidebar"] span[data-baseweb="tag"] span {{
+    color:#FFFFFF !important;
+    font-weight:700 !important;
+    font-size:0.78rem !important;
+}}
+section[data-testid="stSidebar"] span[data-baseweb="tag"] [data-testid="stMarkdownContainer"] {{
+    color:#FFFFFF !important;
+}}
+/* The actual visible text node inside every tag */
+section[data-testid="stSidebar"] [data-baseweb="tag"] > span:first-child {{
+    color:#FFFFFF !important;
+    font-weight:600 !important;
 }}
 /* Multiselect dropdown options and selected values */
 section[data-testid="stSidebar"] [data-baseweb="select"] span,
